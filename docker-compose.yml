@@ -24,11 +24,11 @@ x-n8n: &service-n8n
 
 x-ollama: &service-ollama
   image: ollama/ollama:latest
-  container_name: ollama
+  container_name: ollama-n8n
   networks: ['demo']
   restart: unless-stopped
   ports:
-    - 11434:11434
+    - 11433:11434
   volumes:
     - ollama_storage:/root/.ollama
 
@@ -125,3 +125,36 @@ services:
     <<: *init-ollama
     depends_on:
       - ollama-gpu
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx-proxy
+    networks: ['demo']
+    restart: unless-stopped
+    ports:
+      - 443:443
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs
+      - ./nginx/conf.d:/etc/nginx/conf.d
+    depends_on:
+      - n8n-import
+    command: >
+      /bin/sh -c "sleep 5 && nginx -g 'daemon off;'"
+    environment:
+      - NGINX_HOST=n8n
+
+  nginx-init:
+      image: alpine
+      container_name: nginx-init
+      networks: ['demo']
+      volumes:
+        - ./nginx/certs:/etc/nginx/certs
+      entrypoint: /bin/sh
+      command:
+        - "-c"
+        - |
+          apk add --no-cache openssl && \
+          mkdir -p /etc/nginx/certs && \
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/certs/selfsigned.key -out /etc/nginx/certs/selfsigned.crt -subj "/CN=n8n"
+      depends_on:
+        - n8n-import
